@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
+#include "hardware/pwm.h"
 
 /// \tag::hello_uart[]
 
@@ -84,31 +85,68 @@ bool msp_response(uint8_t *& data, uint8_t & length) {
 }
 
 int main() {
-    // Set up our UART with the required speed.
-    uart_init(UART_ID, BAUD_RATE);
 
-    // Set the TX and RX pins by using the function select on the GPIO
-    // Set datasheet for more information on function select
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    stdio_init_all();
+    printf("starting");
+    // Tell GPIO 0 and 1 they are allocated to the PWM
+    gpio_set_function(2, GPIO_FUNC_PWM);
+    gpio_set_function(3, GPIO_FUNC_PWM);
 
-    printf("press enter");
-    char line[5];
-    scanf("%s", line);
+    // Find out which PWM slice is connected to GPIO 2 (it's slice 1)
+    uint slice_num = pwm_gpio_to_slice_num(2);
 
-    uint8_t * data;
-    msp_request(MessageCodes::MSP_SERVO, data, 0);
+    // Get some sensible defaults for the slice configuration. By default, the
+    // counter is allowed to wrap over its maximum range (0 to 2**16-1)
+    pwm_config config = pwm_get_default_config();
+    // Set divider, reduces counter clock to sysclock/this value
+    pwm_config_set_clkdiv(&config, 4.f);
 
-    uint8_t length = 0;
-    if (!msp_response(data, length))
-    {
-        printf("crc didn't checkout");
-    }
+    // Load the configuration into our PWM slice, and set it running.
+    pwm_init(slice_num, &config, true);
 
-    for (int i = 0; i < length; ++i)
-    {
-        printf("%d ",data[i]);
-    }
+    // Set channel A output high for one cycle before dropping
+    pwm_set_chan_level(slice_num, PWM_CHAN_A, 0);
+    sleep_ms(1000);
+    pwm_set_chan_level(slice_num, PWM_CHAN_A, 1000);
+    sleep_ms(1000);
+    pwm_set_chan_level(slice_num, PWM_CHAN_A, 2000);
+    sleep_ms(1000);
+    pwm_set_chan_level(slice_num, PWM_CHAN_A, 3000);
+    sleep_ms(1000);
+
+    printf("finished");
+    // Set initial B output high for three cycles before dropping
+//    pwm_set_chan_level(slice_num, PWM_CHAN_B, 3);
+    // Set the PWM running
+//    pwm_set_enabled(slice_num, true);
+    /// \end::setup_pwm[]
+
+//
+//    // Set up our UART with the required speed.
+//    uart_init(UART_ID, BAUD_RATE);
+//
+//    // Set the TX and RX pins by using the function select on the GPIO
+//    // Set datasheet for more information on function select
+//    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+//    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+//
+//    printf("press enter");
+//    char line[5];
+//    scanf("%s", line);
+//
+//    uint8_t * data;
+//    msp_request(MessageCodes::MSP_SERVO, data, 0);
+//
+//    uint8_t length = 0;
+//    if (!msp_response(data, length))
+//    {
+//        printf("crc didn't checkout");
+//    }
+//
+//    for (int i = 0; i < length; ++i)
+//    {
+//        printf("%d ",data[i]);
+//    }
 }
 
 /// \end::hello_uart[]
