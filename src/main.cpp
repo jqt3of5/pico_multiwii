@@ -68,11 +68,25 @@ bool msp_response(uint8_t *& data, uint8_t & length) {
     uint8_t start[5] = {0};
     uart_read_blocking(UART_ID,start, 5);
 
+    for (int i = 0; i < 3; ++i)
+    {
+        printf("%c", start[i]);
+    }
+
     length = start[3];
+    printf(" %d", length);
+
     uint8_t code = start[4];
+    printf(" %d", code);
 
     data = (uint8_t*)calloc(1, length + 1);
     uart_read_blocking(UART_ID, data, length + 1);
+
+    for (int i = 0; i < length; ++i)
+    {
+        printf(" %x", data[i]);
+    }
+
     uint8_t crc = data[length];
 
     crc = crc ^ length ^ code;
@@ -95,6 +109,8 @@ void init_servo()
     // Get some sensible defaults for the slice configuration. By default, the
     // counter is allowed to wrap over its maximum range (0 to 2**16-1)
     pwm_config config = pwm_get_default_config();
+
+    //pico clock is 130MHz
     // Set divider, reduces counter clock to sysclock/this value
     pwm_config_set_clkdiv(&config, 250.f);
     pwm_config_set_wrap(&config, 10000);
@@ -104,53 +120,49 @@ void init_servo()
 }
 void set_servo_angle(int angle, uint channel)
 {
-    angle = angle % 360;
+    if (angle < 0)
+    {
+        angle = 0;
+    }
+    if (angle > 180)
+    {
+        angle = 180;
+    }
+
     uint slice_num = pwm_gpio_to_slice_num(2);
-    pwm_set_chan_level(slice_num, channel, 750 + 8000/360 * angle);
+    pwm_set_chan_level(slice_num, channel, 200 + 1000.0/180.0 * angle);
 }
+
 int main() {
     stdio_init_all();
-    sleep_ms(5000);
-    printf("starting");
 
     init_servo();
 
-    int angle = 0;
-    while(true)
+    // Set up our UART with the required speed.
+    uart_init(UART_ID, BAUD_RATE);
+
+    // Set the TX and RX pins by using the function select on the GPIO
+    // Set datasheet for more information on function select
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+
+    printf("press enter");
+    char line[5];
+    scanf("%s", line);
+
+    uint8_t * data;
+    msp_request(MessageCodes::MSP_SERVO, data, 0);
+
+    uint8_t length = 0;
+    if (!msp_response(data, length))
     {
-        set_servo_angle(angle, PWM_CHAN_A);
-        set_servo_angle(angle, PWM_CHAN_B);
-        angle += 1;
-        sleep_ms(10);
+        printf("crc didn't checkout");
     }
 
-    printf("finished");
-//
-//    // Set up our UART with the required speed.
-//    uart_init(UART_ID, BAUD_RATE);
-//
-//    // Set the TX and RX pins by using the function select on the GPIO
-//    // Set datasheet for more information on function select
-//    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-//    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-//
-//    printf("press enter");
-//    char line[5];
-//    scanf("%s", line);
-//
-//    uint8_t * data;
-//    msp_request(MessageCodes::MSP_SERVO, data, 0);
-//
-//    uint8_t length = 0;
-//    if (!msp_response(data, length))
-//    {
-//        printf("crc didn't checkout");
-//    }
-//
-//    for (int i = 0; i < length; ++i)
-//    {
-//        printf("%d ",data[i]);
-//    }
+    for (int i = 0; i < length; ++i)
+    {
+        printf("%d ",data[i]);
+    }
 }
 
 /// \end::hello_uart[]
